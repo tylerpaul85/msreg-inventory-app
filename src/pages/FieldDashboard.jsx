@@ -198,25 +198,67 @@ export default function FieldDashboard({ session, onNavigate }) {
     setScanning(false);
   };
 
+  const extractTokenOrId = (raw) => {
+    if (!raw) return '';
+    let cleaned = raw.trim();
+    try {
+      if (cleaned.startsWith('http://') || cleaned.startsWith('https://')) {
+        const url = new URL(cleaned);
+        const tokenParam = url.searchParams.get('token') || url.searchParams.get('qr_token') || url.searchParams.get('id');
+        if (tokenParam) return tokenParam.trim();
+        const segments = url.pathname.split('/').filter(Boolean);
+        if (segments.length > 0) cleaned = segments[segments.length - 1];
+      }
+    } catch (e) {
+      // not a URL, use raw string
+    }
+    return cleaned;
+  };
+
   const handleQrResolved = async (qrToken) => {
     await stopScanner();
     setLoading(true);
     setError('');
 
+    const cleanToken = extractTokenOrId(qrToken);
+
     try {
-      const { data, error: fetchError } = await supabase
+      // 1. Try exact qr_token lookup
+      let { data, error: fetchError } = await supabase
         .from('signs')
         .select('*')
-        .eq('qr_token', qrToken.trim())
-        .single();
+        .eq('qr_token', cleanToken)
+        .maybeSingle();
 
-      if (fetchError || !data) {
-        throw new Error('Sign not found. Check the QR code and try again.');
+      // 2. Fallback: Try lookup by short_id if direct token match returned no rows
+      if (!data) {
+        const paddedShortId = cleanToken.padStart(3, '0');
+        const { data: shortIdData } = await supabase
+          .from('signs')
+          .select('*')
+          .or(`short_id.eq.${cleanToken},short_id.eq.${paddedShortId}`)
+          .maybeSingle();
+
+        if (shortIdData) {
+          data = shortIdData;
+        }
+      }
+
+      if (fetchError) {
+        if (fetchError.code === 'PGRST205' || fetchError.message?.includes('schema cache')) {
+          throw new Error('Database table "signs" not found. Please run the migration script in supabase_schema.sql via your Supabase SQL Editor.');
+        }
+        throw fetchError;
+      }
+
+      if (!data) {
+        throw new Error(`Sign not found for QR token "${cleanToken}". Verify the code and try again.`);
       }
 
       setSign(data);
     } catch (err) {
-      setError(err.message);
+      console.error('QR resolution error:', err);
+      setError(err.message || 'Error resolving QR code.');
     } finally {
       setLoading(false);
     }
@@ -231,20 +273,30 @@ export default function FieldDashboard({ session, onNavigate }) {
     setSign(null);
     await stopScanner();
 
+    const searchStr = manualId.trim();
+    const paddedShortId = searchStr.padStart(3, '0');
+
     try {
       const { data, error: fetchError } = await supabase
         .from('signs')
         .select('*')
-        .eq('short_id', manualId.trim())
-        .single();
+        .or(`short_id.eq.${searchStr},short_id.eq.${paddedShortId},qr_token.eq.${searchStr}`)
+        .maybeSingle();
 
-      if (fetchError || !data) {
-        throw new Error(`Sign with ID "${manualId}" not found. Verify the number printed on the sign.`);
+      if (fetchError) {
+        if (fetchError.code === 'PGRST205' || fetchError.message?.includes('schema cache')) {
+          throw new Error('Database table "signs" not found. Please run the migration script in supabase_schema.sql via your Supabase SQL Editor.');
+        }
+        throw fetchError;
+      }
+
+      if (!data) {
+        throw new Error(`Sign with ID or token "${searchStr}" not found. Verify the number printed on the sign.`);
       }
 
       setSign(data);
     } catch (err) {
-      setError(err.message);
+      setError(err.message || 'Manual lookup failed.');
     } finally {
       setLoading(false);
     }

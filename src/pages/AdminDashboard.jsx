@@ -248,13 +248,13 @@ export default function AdminDashboard({ session }) {
     }
   };
 
-  // Generate QR Code dataURL helper
   const generateQRCodeURL = async (token) => {
+    if (!token) return '';
     try {
       return await QRCode.toDataURL(token, {
-        width: 300,
+        width: 400,
         margin: 4,
-        errorCorrectionLevel: 'Q',
+        errorCorrectionLevel: 'H',
         color: {
           dark: '#000000',
           light: '#ffffff'

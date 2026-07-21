@@ -83,9 +83,15 @@ export default function Login({ onAuthSuccess }) {
         }
       }
 
-      // Capture database trigger/constraint failures gracefully and explain the migration requirement
-      if (errMsg.includes('profiles_role_check') || errMsg.includes('violates check constraint') || errMsg.includes('profiles')) {
-        errMsg = 'Database constraint error: The "manager" role is not allowed by your current database schema. Please make sure you have run the SQL migration script from walkthrough.md in your Supabase SQL Editor to allow manager roles.';
+      // Capture common Supabase error cases cleanly
+      if (errMsg.includes('fetch failed') || errMsg.includes('ENOTFOUND')) {
+        errMsg = 'Network error: Unable to connect to Supabase server. Please verify your network connection and .env settings.';
+      } else if (errMsg.includes('Invalid login credentials')) {
+        errMsg = 'Invalid email address or password. Please check your credentials and try again.';
+      } else if (errMsg.includes('Email not confirmed')) {
+        errMsg = 'Account registered, but email confirmation is enabled in your Supabase Auth project. Disable "Confirm email" in Supabase Auth settings to log in immediately without email verification.';
+      } else if (errMsg.includes('profiles_role_check') || errMsg.includes('violates check constraint') || errMsg.includes('profiles')) {
+        errMsg = 'Database constraint error: The selected role is not recognized by your database schema. Please execute supabase_schema.sql in your Supabase SQL Editor.';
       }
       
       setError(errMsg);
