@@ -5,11 +5,14 @@ import {
   Plus, Search, Filter, Calendar, MapPin, 
   Layers, User, Clock, FileText, CheckCircle, 
   Printer, ArrowLeft, Loader, Trash2, Map as MapIcon, 
-  List as ListIcon, Route, ArrowRight, Edit, Save, X 
+  List as ListIcon, Route, ArrowRight, Edit, Save, X,
+  Key, Lock
 } from 'lucide-react';
 
 export default function AdminDashboard({ session }) {
   const [activeTab, setActiveTab] = useState('inventory'); // 'inventory', 'logs', 'create', 'detail'
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [selectedAssetType, setSelectedAssetType] = useState('Listing Sign');
   
   // Data States
   const [signs, setSigns] = useState([]);
@@ -266,6 +269,17 @@ export default function AdminDashboard({ session }) {
     }
   };
 
+  const getAssetTypeInfo = (label) => {
+    const lbl = (label || '').toLowerCase();
+    if (lbl.includes('supra')) {
+      return { type: 'Supra', displayName: 'Supra', icon: Key };
+    } else if (lbl.includes('lockbox')) {
+      return { type: 'Other Lockbox', displayName: 'Other Lockbox', icon: Lock };
+    } else {
+      return { type: 'Listing Sign', displayName: 'Listing Sign', icon: Layers };
+    }
+  };
+
   const handleViewQrModal = async (signItem) => {
     setQrModalSign(signItem);
     setModalQrUrl('');
@@ -278,6 +292,7 @@ export default function AdminDashboard({ session }) {
 
   const handlePrintSingleSign = async (signItem) => {
     const qrUrl = qrCodes[signItem.qr_token] || await generateQRCodeURL(signItem.qr_token);
+    const typeInfo = getAssetTypeInfo(signItem.label);
     
     const printWindow = window.open('', '_blank', 'width=600,height=600');
     if (!printWindow) {
@@ -288,7 +303,7 @@ export default function AdminDashboard({ session }) {
     printWindow.document.write(`
       <html>
         <head>
-          <title>Print Sign #${signItem.short_id}</title>
+          <title>Print ${typeInfo.displayName} #${signItem.short_id}</title>
           <style>
             body {
               font-family: 'Outfit', -apple-system, sans-serif;
@@ -317,10 +332,11 @@ export default function AdminDashboard({ session }) {
               height: 220px;
             }
             .id-label {
-              font-size: 36px;
+              font-size: 30px;
               font-weight: 900;
               margin-top: 15px;
               letter-spacing: 0.05em;
+              text-transform: uppercase;
             }
             .token-label {
               font-size: 11px;
@@ -334,7 +350,7 @@ export default function AdminDashboard({ session }) {
         <body>
           <div class="card">
             <img class="qr-img" src="${qrUrl}" />
-            <div class="id-label">ID: ${signItem.short_id}</div>
+            <div class="id-label">${typeInfo.displayName} #${signItem.short_id}</div>
             <div class="token-label">${signItem.qr_token}</div>
           </div>
           <script>
@@ -375,7 +391,7 @@ export default function AdminDashboard({ session }) {
         newSignsToInsert.push({
           short_id: shortId,
           qr_token: qrToken,
-          label: newLabel ? `${newLabel} (${i})` : `Batch Sign`,
+          label: newLabel ? (batchCount > 1 ? `${newLabel} (${i})` : newLabel) : `${selectedAssetType} ${shortId}`,
           status: 'return',
           current_holder: null,
           current_holder_name: null,
@@ -539,11 +555,11 @@ export default function AdminDashboard({ session }) {
             <Clock size={13} /> Scan Log
           </button>
           <button 
-            onClick={() => setActiveTab('create')}
+            onClick={() => setShowAddModal(true)}
             className={`btn ${activeTab === 'create' ? 'btn-primary' : 'btn-secondary'}`}
             style={{ padding: '6px 12px', fontSize: '13px', borderRadius: '6px' }}
           >
-            <Plus size={13} /> Create Signs
+            <Plus size={13} /> Add
           </button>
         </div>
       </div>
@@ -616,6 +632,7 @@ export default function AdminDashboard({ session }) {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '16px' }}>
               {filteredSigns.map(sign => {
                 const isEditing = editingSignId === sign.id;
+                const { displayName, icon: IconComponent } = getAssetTypeInfo(sign.label);
                 
                 return (
                   <div key={sign.id} className="glass-panel" style={{ 
@@ -632,7 +649,7 @@ export default function AdminDashboard({ session }) {
                     {isEditing ? (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid hsl(var(--border-color))', paddingBottom: '8px' }}>
-                          <h4 style={{ fontSize: '16px', fontWeight: 800, color: 'hsl(var(--primary))' }}>Override Sign #{sign.short_id}</h4>
+                          <h4 style={{ fontSize: '16px', fontWeight: 800, color: 'hsl(var(--primary))' }}>Override {displayName} #{sign.short_id}</h4>
                           <button onClick={() => setEditingSignId(null)} style={{ background: 'none', border: 'none', color: 'hsl(var(--text-muted))', cursor: 'pointer' }}>
                             <X size={16} />
                           </button>
@@ -713,8 +730,11 @@ export default function AdminDashboard({ session }) {
                       <>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                           <div>
-                            <h4 style={{ fontSize: '18px', fontWeight: 800 }}>Sign #{sign.short_id}</h4>
-                            <p style={{ fontSize: '11px', color: 'hsl(var(--text-muted))', marginTop: '1px' }}>Created {new Date(sign.created_at).toLocaleDateString()}</p>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <IconComponent size={16} style={{ color: 'hsl(var(--primary))', flexShrink: 0 }} />
+                              <h4 style={{ fontSize: '18px', fontWeight: 800, margin: 0 }}>{displayName} #{sign.short_id}</h4>
+                            </div>
+                            <p style={{ fontSize: '11px', color: 'hsl(var(--text-muted))', marginTop: '4px' }}>Created {new Date(sign.created_at).toLocaleDateString()}</p>
                           </div>
                           <span className={`badge badge-${sign.status}`}>
                             {sign.status === 'deliver' ? 'Sign Placed' : sign.status === 'pickup' ? 'Picked Up' : 'Returned'}
@@ -950,9 +970,19 @@ export default function AdminDashboard({ session }) {
         <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
           
           <div className="glass-panel no-print" style={{ padding: '24px' }}>
-            <h3 style={{ fontSize: '18px', fontWeight: 800, marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Plus size={18} style={{ color: 'hsl(var(--primary))' }} /> Generate Yard Signs
-            </h3>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '8px' }}>
+              <h3 style={{ fontSize: '18px', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
+                <Plus size={18} style={{ color: 'hsl(var(--primary))' }} /> Generate {selectedAssetType}s
+              </h3>
+              <button 
+                type="button"
+                onClick={() => setShowAddModal(true)} 
+                className="btn btn-secondary" 
+                style={{ padding: '6px 12px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}
+              >
+                Change Type
+              </button>
+            </div>
             
             <form onSubmit={handleBatchCreate} style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', alignItems: 'flex-end' }}>
               <div style={{ flexGrow: 2, minWidth: '220px' }}>
@@ -961,7 +991,7 @@ export default function AdminDashboard({ session }) {
                   id="newLabel"
                   type="text"
                   className="form-input"
-                  placeholder="e.g. North Side Expansion Sign"
+                  placeholder={`e.g. ${selectedAssetType} - North Side`}
                   value={newLabel}
                   onChange={(e) => setNewLabel(e.target.value)}
                 />
@@ -1037,8 +1067,8 @@ export default function AdminDashboard({ session }) {
                       </div>
                     )}
                     <div>
-                      <div className="id-label" style={{ fontSize: '26px', fontWeight: 900, letterSpacing: '0.05em' }}>
-                        ID: {sign.short_id}
+                      <div className="id-label" style={{ fontSize: '20px', fontWeight: 900, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+                        {selectedAssetType} #{sign.short_id}
                       </div>
                       <div style={{ fontSize: '9px', color: '#777', marginTop: '1px', wordBreak: 'break-all', fontFamily: 'monospace' }}>
                         {sign.qr_token}
@@ -1069,7 +1099,12 @@ export default function AdminDashboard({ session }) {
             >
               <ArrowLeft size={14} /> Back
             </button>
-            <h3 style={{ fontSize: '20px', fontWeight: 800 }}>History for Sign #{selectedSign.short_id}</h3>
+             <h3 style={{ fontSize: '20px', fontWeight: 800 }}>
+              {(() => {
+                const { displayName } = getAssetTypeInfo(selectedSign.label);
+                return `History for ${displayName} #${selectedSign.short_id}`;
+              })()}
+            </h3>
             {selectedSign.label && (
               <span style={{ color: 'hsl(var(--text-secondary))', fontSize: '14px' }}>— {selectedSign.label}</span>
             )}
@@ -1179,7 +1214,12 @@ export default function AdminDashboard({ session }) {
             border: '1px solid hsl(var(--primary) / 0.3)'
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid hsl(var(--border-color))', paddingBottom: '12px', marginBottom: '20px' }}>
-              <h3 style={{ fontSize: '18px', fontWeight: 800, color: 'hsl(var(--text-primary))' }}>Sign QR Code</h3>
+              <h3 style={{ fontSize: '18px', fontWeight: 800, color: 'hsl(var(--text-primary))' }}>
+                {(() => {
+                  const { displayName } = getAssetTypeInfo(qrModalSign.label);
+                  return `${displayName} QR Code`;
+                })()}
+              </h3>
               <button 
                 onClick={() => setQrModalSign(null)} 
                 style={{ background: 'none', border: 'none', color: 'hsl(var(--text-muted))', cursor: 'pointer' }}
@@ -1208,8 +1248,11 @@ export default function AdminDashboard({ session }) {
                   <Loader className="animate-spin" size={20} />
                 </div>
               )}
-              <div style={{ fontSize: '24px', fontWeight: 900, color: 'black', letterSpacing: '0.05em', marginTop: '10px' }}>
-                ID: {qrModalSign.short_id}
+              <div style={{ fontSize: '20px', fontWeight: 900, color: 'black', letterSpacing: '0.05em', marginTop: '10px', textTransform: 'uppercase' }}>
+                {(() => {
+                  const { displayName } = getAssetTypeInfo(qrModalSign.label);
+                  return `${displayName} #${qrModalSign.short_id}`;
+                })()}
               </div>
               <div style={{ fontSize: '10px', color: '#666', marginTop: '2px', wordBreak: 'break-all', fontFamily: 'monospace' }}>
                 {qrModalSign.qr_token}
@@ -1237,6 +1280,111 @@ export default function AdminDashboard({ session }) {
                 style={{ padding: '12px 16px', fontSize: '13px' }}
               >
                 Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Asset Selection Modal Overlay */}
+      {showAddModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(5, 9, 20, 0.85)',
+          backdropFilter: 'blur(8px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 2000,
+          padding: '20px'
+        }} className="no-print">
+          <div className="glass-panel animate-fade-in" style={{
+            width: '100%',
+            maxWidth: '440px',
+            padding: '28px',
+            background: 'hsl(var(--bg-card))',
+            border: '1px solid hsl(var(--primary) / 0.3)',
+            boxShadow: '0 20px 40px rgba(0,0,0,0.5)'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid hsl(var(--border-color))', paddingBottom: '12px', marginBottom: '20px' }}>
+              <h3 style={{ fontSize: '18px', fontWeight: 800, color: 'hsl(var(--text-primary))' }}>Add New Inventory Item</h3>
+              <button 
+                onClick={() => setShowAddModal(false)} 
+                style={{ background: 'none', border: 'none', color: 'hsl(var(--text-muted))', cursor: 'pointer' }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <p style={{ color: 'hsl(var(--text-secondary))', fontSize: '13.5px', marginBottom: '20px', textAlign: 'center' }}>
+              Select the type of inventory asset you would like to generate:
+            </p>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '24px' }}>
+              {[
+                { type: 'Listing Sign', desc: 'Real estate yard signs and riders', icon: Layers, color: '#cfac78' },
+                { type: 'Supra', desc: 'Electronic key box for property showings', icon: Key, color: '#6366f1' },
+                { type: 'Other Lockbox', desc: 'Combination lockboxes and other storage keyboxes', icon: Lock, color: '#10b981' }
+              ].map((option) => {
+                const Icon = option.icon;
+                return (
+                  <button
+                    key={option.type}
+                    onClick={() => {
+                      setSelectedAssetType(option.type);
+                      setNewLabel(option.type);
+                      setCreatedSigns([]); // Reset printed sheet
+                      setActiveTab('create');
+                      setShowAddModal(false);
+                    }}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '16px',
+                      padding: '16px',
+                      borderRadius: '10px',
+                      border: '1px solid hsl(var(--border-color))',
+                      background: 'hsl(var(--bg-app) / 0.3)',
+                      textAlign: 'left',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease',
+                    }}
+                    className="add-option-btn"
+                  >
+                    <div style={{
+                      width: '40px',
+                      height: '40px',
+                      borderRadius: '8px',
+                      background: `${option.color}15`,
+                      border: `1px solid ${option.color}30`,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: option.color
+                    }}>
+                      <Icon size={20} />
+                    </div>
+                    <div style={{ flexGrow: 1 }}>
+                      <div style={{ fontWeight: 700, fontSize: '15px', color: 'hsl(var(--text-primary))' }}>{option.type}</div>
+                      <div style={{ fontSize: '12px', color: 'hsl(var(--text-muted))', marginTop: '2px' }}>{option.desc}</div>
+                    </div>
+                    <ArrowRight size={16} style={{ color: 'hsl(var(--text-muted))' }} />
+                  </button>
+                );
+              })}
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => setShowAddModal(false)}
+                className="btn btn-secondary"
+                style={{ padding: '10px 20px', fontSize: '13px' }}
+              >
+                Cancel
               </button>
             </div>
           </div>

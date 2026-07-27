@@ -310,6 +310,14 @@ body {
   border: 1px solid hsl(var(--border-color));
 }
 
+/* Add Asset Modal Options */
+.add-option-btn:hover {
+  background: hsl(var(--bg-app) / 0.8) !important;
+  border-color: hsl(var(--primary) / 0.5) !important;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4), var(--shadow-glow);
+}
+
 /* Print Styles */
 @media print {
   body {
