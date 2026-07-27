@@ -1,15 +1,34 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
 import { Html5Qrcode } from 'html5-qrcode';
-import { Camera, Navigation, Hash, CheckCircle, AlertCircle, Loader, ArrowRight, RotateCcw, User, MapPin } from 'lucide-react';
+import { 
+  Camera, Navigation, Hash, CheckCircle, AlertCircle, Loader, 
+  ArrowRight, RotateCcw, User, MapPin, Layers, Key, Lock, Plus, Trash2 
+} from 'lucide-react';
 
 export default function FieldDashboard({ session, onNavigate }) {
   const [scanning, setScanning] = useState(false);
   const [manualId, setManualId] = useState('');
-  const [sign, setSign] = useState(null);
+  const [scannedItems, setScannedItems] = useState([]);
+  const [isScanningMore, setIsScanningMore] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   
+  const getAssetTypeInfo = (label) => {
+    const lbl = (label || '').toLowerCase();
+    if (lbl.includes('supra')) {
+      return { type: 'Supra', displayName: 'Supra', icon: Key };
+    } else if (lbl.includes('lockbox')) {
+      return { type: 'Other Lockbox', displayName: 'Other Lockbox', icon: Lock };
+    } else {
+      return { type: 'Listing Sign', displayName: 'Listing Sign', icon: Layers };
+    }
+  };
+
+  const assetInfo = scannedItems.length === 1 
+    ? getAssetTypeInfo(scannedItems[0].label) 
+    : { displayName: 'Item', type: 'Listing Sign', icon: Layers };
+
   // Geolocation State
   const [gpsLoading, setGpsLoading] = useState(false);
   const [coords, setCoords] = useState(null);
@@ -77,12 +96,12 @@ export default function FieldDashboard({ session, onNavigate }) {
     };
   }, []);
 
-  // Request GPS automatically when sign is resolved
+  // Request GPS automatically when items are resolved
   useEffect(() => {
-    if (sign) {
+    if (scannedItems.length > 0 && !coords && !gpsLoading) {
       requestGPS();
     }
-  }, [sign]);
+  }, [scannedItems]);
 
   const requestGPS = () => {
     setGpsLoading(true);
@@ -103,7 +122,7 @@ export default function FieldDashboard({ session, onNavigate }) {
       },
       (err) => {
         console.error(err);
-        setError('Failed to obtain GPS coordinates. Location access is required to track physical sign placements.');
+        setError('Failed to obtain GPS coordinates. Location access is required to track physical asset placements.');
         setGpsLoading(false);
       },
       { enableHighAccuracy: true, timeout: 8000 }
@@ -113,7 +132,6 @@ export default function FieldDashboard({ session, onNavigate }) {
   const startScanner = async () => {
     setError('');
     setScanning(true);
-    setSign(null);
 
     // Default to first camera if not loaded yet
     let targetCameraId = selectedCameraId;
@@ -252,10 +270,17 @@ export default function FieldDashboard({ session, onNavigate }) {
       }
 
       if (!data) {
-        throw new Error(`Sign not found for QR token "${cleanToken}". Verify the code and try again.`);
+        throw new Error(`Item not found for QR token "${cleanToken}". Verify the code and try again.`);
       }
 
-      setSign(data);
+      setScannedItems(prev => {
+        if (prev.some(item => item.id === data.id)) {
+          setError('This item has already been added to the current batch.');
+          return prev;
+        }
+        return [...prev, data];
+      });
+      setIsScanningMore(false);
     } catch (err) {
       console.error('QR resolution error:', err);
       setError(err.message || 'Error resolving QR code.');
@@ -270,7 +295,6 @@ export default function FieldDashboard({ session, onNavigate }) {
 
     setLoading(true);
     setError('');
-    setSign(null);
     await stopScanner();
 
     const searchStr = manualId.trim();
@@ -291,10 +315,18 @@ export default function FieldDashboard({ session, onNavigate }) {
       }
 
       if (!data) {
-        throw new Error(`Sign with ID or token "${searchStr}" not found. Verify the number printed on the sign.`);
+        throw new Error(`Item with ID or token "${searchStr}" not found. Verify the number printed on the label.`);
       }
 
-      setSign(data);
+      setScannedItems(prev => {
+        if (prev.some(item => item.id === data.id)) {
+          setError('This item has already been added to the current batch.');
+          return prev;
+        }
+        return [...prev, data];
+      });
+      setIsScanningMore(false);
+      setManualId('');
     } catch (err) {
       setError(err.message || 'Manual lookup failed.');
     } finally {
@@ -303,7 +335,8 @@ export default function FieldDashboard({ session, onNavigate }) {
   };
 
   const resetAll = () => {
-    setSign(null);
+    setScannedItems([]);
+    setIsScanningMore(false);
     setCoords(null);
     setAction('');
     setNotes('');
@@ -315,9 +348,9 @@ export default function FieldDashboard({ session, onNavigate }) {
   };
 
   const handleSubmitAction = async () => {
-    if (!sign) return;
+    if (scannedItems.length === 0) return;
     if (!action) {
-      setError('Please select one of the four actions.');
+      setError('Please select one of the actions.');
       return;
     }
     if (!agentName.trim()) {
@@ -325,7 +358,7 @@ export default function FieldDashboard({ session, onNavigate }) {
       return;
     }
     if (action === 'deliver' && !propertyAddress.trim()) {
-      setError('Property Address is required for sign delivery logs.');
+      setError('Property Address is required for placing items.');
       return;
     }
     if (!coords) {
@@ -337,27 +370,32 @@ export default function FieldDashboard({ session, onNavigate }) {
     setError('');
 
     try {
-      // Submit via our security-definer database function RPC (handles anon scanning securely)
-      const { error: rpcError } = await supabase.rpc('log_scan', {
-        p_sign_id: sign.id,
-        p_action: action,
-        p_latitude: coords.latitude,
-        p_longitude: coords.longitude,
-        p_notes: notes.trim() || null,
-        p_agent_name: agentName.trim(),
-        p_property_address: action === 'deliver' ? propertyAddress.trim() : null
-      });
+      // Loop through all scanned items in the batch and submit logs
+      for (const item of scannedItems) {
+        const { error: rpcError } = await supabase.rpc('log_scan', {
+          p_sign_id: item.id,
+          p_action: action,
+          p_latitude: coords.latitude,
+          p_longitude: coords.longitude,
+          p_notes: notes.trim() || null,
+          p_agent_name: agentName.trim(),
+          p_property_address: action === 'deliver' ? propertyAddress.trim() : null
+        });
 
-      if (rpcError) throw rpcError;
+        if (rpcError) throw rpcError;
+      }
 
       // Navigate to confirmation screen
       onNavigate('confirmation', {
-        signShortId: sign.short_id,
+        signShortId: scannedItems.map(item => item.short_id).join(', '),
         action: action,
         coords: coords,
         notes: notes,
         agentName: agentName,
-        propertyAddress: action === 'deliver' ? propertyAddress : null
+        propertyAddress: action === 'deliver' ? propertyAddress : null,
+        assetTypeName: scannedItems.length === 1 
+          ? getAssetTypeInfo(scannedItems[0].label).displayName 
+          : 'Batch Items'
       });
 
     } catch (err) {
@@ -373,10 +411,14 @@ export default function FieldDashboard({ session, onNavigate }) {
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
         <div>
-          <h2 style={{ fontSize: '22px', fontWeight: 700 }}>Scan Yard Sign</h2>
-          <p style={{ color: 'hsl(var(--text-secondary))', fontSize: '13px' }}>Report sign deployment status instantly</p>
+          <h2 style={{ fontSize: '22px', fontWeight: 700 }}>
+            {scannedItems.length > 0 ? 'Batch Scan Assets' : 'Scan Yard Sign & Lockbox'}
+          </h2>
+          <p style={{ color: 'hsl(var(--text-secondary))', fontSize: '13px' }}>
+            {scannedItems.length > 0 ? `Manage batch action for ${scannedItems.length} scanned items` : 'Report sign or lockbox status instantly'}
+          </p>
         </div>
-        {sign && (
+        {scannedItems.length > 0 && (
           <button onClick={resetAll} className="btn btn-secondary" style={{ padding: '8px 12px', fontSize: '12px' }}>
             <RotateCcw size={14} /> Reset
           </button>
@@ -410,7 +452,7 @@ export default function FieldDashboard({ session, onNavigate }) {
       )}
 
       {/* STEP 1: RESOLVE THE SIGN */}
-      {!sign && !loading && (
+      {(scannedItems.length === 0 || isScanningMore) && !loading && (
         <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
           
           {/* Scanner Box */}
@@ -463,9 +505,11 @@ export default function FieldDashboard({ session, onNavigate }) {
                     <Camera size={26} strokeWidth={1.5} />
                   </div>
                   <div>
-                    <h3 style={{ fontSize: '17px', fontWeight: 700, marginBottom: '6px', letterSpacing: '-0.01em' }}>Scan Sign QR Code</h3>
+                    <h3 style={{ fontSize: '17px', fontWeight: 700, marginBottom: '6px', letterSpacing: '-0.01em' }}>
+                      {scannedItems.length > 0 ? 'Scan Next Item' : 'Scan Asset QR Code'}
+                    </h3>
                     <p style={{ color: 'hsl(var(--text-secondary))', fontSize: '13px', lineHeight: '1.45' }}>
-                      Point your camera at the QR code printed on the yard sign to retrieve and resolve its inventory record instantly.
+                      Point your camera at the QR code printed on the sign, Supra, or lockbox to add it to the current custody update.
                     </p>
                   </div>
                 </div>
@@ -476,7 +520,7 @@ export default function FieldDashboard({ session, onNavigate }) {
             )}
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', color: 'hsl(var(--text-muted))', fontSize: '13px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifycontent: 'center', gap: '12px', color: 'hsl(var(--text-muted))', fontSize: '13px' }}>
             <div style={{ height: '1px', background: 'hsl(var(--border-color))', flexGrow: 1 }}></div>
             <span>OR ENTER MANUALLY</span>
             <div style={{ height: '1px', background: 'hsl(var(--border-color))', flexGrow: 1 }}></div>
@@ -491,7 +535,7 @@ export default function FieldDashboard({ session, onNavigate }) {
               <input
                 type="text"
                 className="form-input"
-                placeholder="Enter sign number (e.g. 042)"
+                placeholder="Enter item number (e.g. 042)"
                 value={manualId}
                 onChange={(e) => setManualId(e.target.value)}
                 style={{ flexGrow: 1 }}
@@ -501,32 +545,100 @@ export default function FieldDashboard({ session, onNavigate }) {
               </button>
             </form>
           </div>
+
+          {/* Show current batch if scanning more */}
+          {isScanningMore && scannedItems.length > 0 && (
+            <div className="glass-panel animate-fade-in" style={{ padding: '20px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                <h4 style={{ fontSize: '14px', fontWeight: 700, textTransform: 'uppercase', color: 'hsl(var(--text-secondary))' }}>
+                  Current Batch ({scannedItems.length})
+                </h4>
+                <button 
+                  onClick={() => setIsScanningMore(false)} 
+                  className="btn btn-secondary" 
+                  style={{ padding: '4px 8px', fontSize: '11px' }}
+                >
+                  Back to Log Form
+                </button>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {scannedItems.map((item) => {
+                  const typeInfo = getAssetTypeInfo(item.label);
+                  return (
+                    <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'hsl(var(--bg-app) / 0.5)', padding: '8px 12px', borderRadius: '6px', border: '1px solid hsl(var(--border-color))' }}>
+                      <span style={{ fontSize: '13px', fontWeight: 600 }}>{typeInfo.displayName} #{item.short_id}</span>
+                      <button 
+                        type="button"
+                        onClick={() => {
+                          setScannedItems(prev => prev.filter(x => x.id !== item.id));
+                        }} 
+                        style={{ background: 'none', border: 'none', color: 'hsl(var(--danger))', cursor: 'pointer', fontSize: '12px' }}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
-      {/* STEP 2: LOG ACTION FOR RESOLVED SIGN */}
-      {sign && !loading && (
+      {/* STEP 2: LOG ACTION FOR RESOLVED BATCH */}
+      {scannedItems.length > 0 && !isScanningMore && !loading && (
         <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           
-          {/* Sign Details Header Card */}
+          {/* Batch Details Header Card */}
           <div className="glass-panel" style={{ padding: '16px 20px', borderLeft: '4px solid hsl(var(--primary))' }}>
-            <span style={{ fontSize: '11px', fontWeight: 700, color: 'hsl(var(--primary))', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              Identified Sign
-            </span>
-            <h3 style={{ fontSize: '22px', fontWeight: 800, margin: '2px 0 6px 0' }}>
-              Sign #{sign.short_id}
-            </h3>
-            {sign.label && (
-              <p style={{ color: 'hsl(var(--text-secondary))', fontSize: '14px', marginBottom: '8px' }}>
-                {sign.label}
-              </p>
-            )}
-            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-              <span className={`badge badge-${sign.status}`}>
-                Current: {sign.status === 'deliver' ? 'Sign Placed' : sign.status === 'pickup' ? 'Picked Up' : 'Returned'}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+              <span style={{ fontSize: '11px', fontWeight: 700, color: 'hsl(var(--primary))', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                Scanned Items ({scannedItems.length})
               </span>
+              <button
+                type="button"
+                onClick={() => setIsScanningMore(true)}
+                className="btn btn-secondary"
+                style={{ padding: '4px 8px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }}
+              >
+                <Plus size={12} /> Add Another
+              </button>
+            </div>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {scannedItems.map((item) => {
+                const typeInfo = getAssetTypeInfo(item.label);
+                const ItemIcon = typeInfo.icon;
+                return (
+                  <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', background: 'hsl(var(--bg-app) / 0.3)', borderRadius: '6px', border: '1px solid hsl(var(--border-color))' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <ItemIcon size={14} style={{ color: 'hsl(var(--primary))' }} />
+                      <span style={{ color: 'hsl(var(--text-primary))', fontWeight: 700, fontSize: '13.5px' }}>
+                        {typeInfo.displayName} #{item.short_id}
+                      </span>
+                      {item.label && (
+                        <span style={{ color: 'hsl(var(--text-muted))', fontSize: '11px' }}>
+                          ({item.label})
+                        </span>
+                      )}
+                    </div>
+                    {scannedItems.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setScannedItems(prev => prev.filter(x => x.id !== item.id));
+                        }}
+                        style={{ background: 'none', border: 'none', color: 'hsl(var(--danger))', cursor: 'pointer', fontSize: '12px', padding: '2px 4px' }}
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
+
 
           {/* User Name Input (Required for custody logging) */}
           <div className="glass-panel" style={{ padding: '16px 20px' }}>
@@ -560,7 +672,7 @@ export default function FieldDashboard({ session, onNavigate }) {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
               {[
                 { id: 'pickup', label: 'Pickup', desc: 'From office/site' },
-                { id: 'deliver', label: 'Sign Placed', desc: 'Drop at property' },
+                { id: 'deliver', label: scannedItems.length === 1 ? `${assetInfo.displayName} Placed` : 'Assets Placed', desc: 'Drop at property' },
                 { id: 'return', label: 'Return', desc: 'Back to office' }
               ].map((act) => {
                 const isActive = action === act.id;
@@ -616,7 +728,7 @@ export default function FieldDashboard({ session, onNavigate }) {
                 required
               />
               <p style={{ fontSize: '11px', color: 'hsl(var(--text-muted))', marginTop: '4px' }}>
-                Required for sign deliveries to track the active property location.
+                Required for placements to track the active property location.
               </p>
             </div>
           )}
@@ -671,7 +783,7 @@ export default function FieldDashboard({ session, onNavigate }) {
               id="notes"
               className="form-input"
               rows={2}
-              placeholder="e.g. Placed left of mailbox, sign has dirt on bottom"
+              placeholder="e.g. Placed left of mailbox, keybox code is 1234, etc."
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               style={{ resize: 'none' }}

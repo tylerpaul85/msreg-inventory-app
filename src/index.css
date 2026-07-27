@@ -320,6 +320,12 @@ body {
 
 /* Print Styles */
 @media print {
+  html, body, #root {
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+  }
+
   body {
     background: white !important;
     color: black !important;

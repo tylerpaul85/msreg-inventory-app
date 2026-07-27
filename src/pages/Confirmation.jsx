@@ -2,18 +2,18 @@ import React from 'react';
 import { CheckCircle2, ArrowLeft, Navigation, FileText, Calendar, User, MapPin } from 'lucide-react';
 
 export default function Confirmation({ state, onNavigate }) {
-  const { signShortId, action, coords, notes, agentName, propertyAddress } = state || {};
+  const { signShortId, action, coords, notes, agentName, propertyAddress, assetTypeName = 'Listing Sign' } = state || {};
 
   const getActionDetails = (act) => {
     switch (act) {
       case 'checkout':
-        return { label: 'Checked Out', desc: 'Sign is in custody', color: 'hsl(var(--primary))' };
+        return { label: 'Checked Out', desc: `${assetTypeName} is in custody`, color: 'hsl(var(--primary))' };
       case 'deliver':
-        return { label: 'Delivered', desc: 'Sign placed at property', color: 'hsl(var(--success))' };
+        return { label: 'Delivered', desc: `${assetTypeName} placed at property`, color: 'hsl(var(--success))' };
       case 'pickup':
-        return { label: 'Picked Up', desc: 'Sign retrieved and in transit', color: 'hsl(var(--warning))' };
+        return { label: 'Picked Up', desc: `${assetTypeName} retrieved and in transit`, color: 'hsl(var(--warning))' };
       case 'return':
-        return { label: 'Returned', desc: 'Sign returned to storage', color: 'hsl(var(--text-secondary))' };
+        return { label: 'Returned', desc: `${assetTypeName} returned to storage`, color: 'hsl(var(--text-secondary))' };
       default:
         return { label: 'Logged', desc: 'Action logged successfully', color: 'hsl(var(--text-primary))' };
     }
@@ -58,8 +58,8 @@ export default function Confirmation({ state, onNavigate }) {
           marginBottom: '14px'
         }}>
           <div>
-            <span style={{ fontSize: '11px', color: 'hsl(var(--text-muted))', fontWeight: 700, textTransform: 'uppercase' }}>Sign Details</span>
-            <h3 style={{ fontSize: '18px', fontWeight: 800, color: 'hsl(var(--text-primary))' }}>Sign #{signShortId || 'N/A'}</h3>
+            <span style={{ fontSize: '11px', color: 'hsl(var(--text-muted))', fontWeight: 700, textTransform: 'uppercase' }}>{assetTypeName} Details</span>
+            <h3 style={{ fontSize: '18px', fontWeight: 800, color: 'hsl(var(--text-primary))' }}>{assetTypeName} #{signShortId || 'N/A'}</h3>
           </div>
           <span className={`badge badge-${action}`} style={{ fontSize: '12px', padding: '6px 12px' }}>
             {details.label}
@@ -136,7 +136,7 @@ export default function Confirmation({ state, onNavigate }) {
         className="btn btn-primary"
         style={{ width: '100%', padding: '12px' }}
       >
-        <ArrowLeft size={16} /> Scan Another Sign
+        <ArrowLeft size={16} /> Scan Another Item
       </button>
     </div>
   );
