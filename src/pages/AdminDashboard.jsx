@@ -165,7 +165,7 @@ export default function AdminDashboard({ session }) {
       const marker = window.L.marker([scan.latitude, scan.longitude]).addTo(map);
       marker.bindPopup(`
         <div style="font-family: Outfit, sans-serif; padding: 4px; color: #1e293b;">
-          <h4 style="margin: 0; font-size:14px; font-weight:800; color: #cfac78;">Sign #${scan.signs?.short_id}</h4>
+          <h4 style="margin: 0; font-size:14px; font-weight:800; color: #111112;">Sign #${scan.signs?.short_id}</h4>
           <p style="margin:4px 0 0 0; font-size:12px;">Action: <b style="text-transform:uppercase;">${scan.action}</b></p>
           <p style="margin:2px 0 0 0; font-size:12px;">Logged by: <b>${scan.agent_name || 'Agent'}</b></p>
           ${scan.property_address ? `<p style="margin:4px 0 0 0; font-size:11px; color:#c2410c; background: #fff7ed; padding: 4px; border-radius: 4px;">📍 ${scan.property_address}</p>` : ''}
@@ -209,7 +209,7 @@ export default function AdminDashboard({ session }) {
     // Plot route polyline path connecting the timeline pins
     if (latlngs.length > 1) {
       window.L.polyline(latlngs, { 
-        color: '#cfac78', 
+        color: '#111112', 
         weight: 3,
         dashArray: '5, 8',
         lineJoin: 'round'
@@ -221,7 +221,7 @@ export default function AdminDashboard({ session }) {
       const marker = window.L.marker([point.latitude, point.longitude]).addTo(map);
       marker.bindPopup(`
         <div style="font-family: Outfit, sans-serif; padding: 2px; color: #1e293b;">
-          <b style="font-size: 13px; color: #cfac78;">Stop #${idx + 1}: ${point.action.toUpperCase()}</b>
+          <b style="font-size: 13px; color: #111112;">Stop #${idx + 1}: ${point.action.toUpperCase()}</b>
           <p style="margin:2px 0 0 0; font-size: 11px;">Agent: <b>${point.agent_name || 'Anonymous'}</b></p>
           ${point.property_address ? `<p style="margin:2px 0 0 0; font-size: 11px; color:#c2410c;">Address: ${point.property_address}</p>` : ''}
           <p style="margin:2px 0 0 0; font-size: 10px; color:#64748b;">${new Date(point.created_at).toLocaleString()}</p>
@@ -1326,7 +1326,7 @@ export default function AdminDashboard({ session }) {
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '24px' }}>
               {[
-                { type: 'Listing Sign', desc: 'Real estate yard signs and riders', icon: Layers, color: '#cfac78' },
+                { type: 'Listing Sign', desc: 'Real estate yard signs and riders', icon: Layers, color: '#fafafb' },
                 { type: 'Supra', desc: 'Electronic key box for property showings', icon: Key, color: '#6366f1' },
                 { type: 'Other Lockbox', desc: 'Combination lockboxes and other storage keyboxes', icon: Lock, color: '#10b981' }
               ].map((option) => {

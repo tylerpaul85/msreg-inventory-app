@@ -7,7 +7,7 @@ export default function Confirmation({ state, onNavigate }) {
   const getActionDetails = (act) => {
     switch (act) {
       case 'checkout':
-        return { label: 'Checked Out', desc: `${assetTypeName} is in custody`, color: 'hsl(var(--primary))' };
+        return { label: 'Checked Out', desc: `${assetTypeName} is in custody`, color: 'hsl(var(--checkout))' };
       case 'deliver':
         return { label: 'Delivered', desc: `${assetTypeName} placed at property`, color: 'hsl(var(--success))' };
       case 'pickup':

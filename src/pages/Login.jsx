@@ -107,7 +107,7 @@ export default function Login({ onAuthSuccess }) {
       alignItems: 'center',
       justifyContent: 'center',
       padding: '20px',
-      background: 'radial-gradient(circle at top right, hsl(36 45% 64% / 0.1), transparent 45%), radial-gradient(circle at bottom left, hsl(224 35% 9% / 0.8), transparent 45%)'
+      background: 'radial-gradient(circle at top right, hsl(240 4% 100% / 0.03), transparent 45%), radial-gradient(circle at bottom left, hsl(240 4% 20% / 0.2), transparent 45%)'
     }}>
       <div className="glass-panel animate-fade-in" style={{
         width: '100%',
