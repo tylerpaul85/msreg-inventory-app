@@ -35,7 +35,7 @@ export default function AdminDashboard({ session }) {
     deliver: true,
     pickup: true,
     return: true,
-    admin_override: false
+    admin_override: true
   });
   
   // Sign Detail Timeline State
@@ -545,7 +545,7 @@ export default function AdminDashboard({ session }) {
       deliver: true,
       pickup: true,
       return: true,
-      admin_override: false
+      admin_override: true
     });
   };
 
