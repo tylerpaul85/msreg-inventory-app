@@ -24,6 +24,10 @@ export default function AdminDashboard({ session }) {
   // Search and status filters (Inventory list)
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [typeFilter, setTypeFilter] = useState('');
+  
+  // Scan Log list filter
+  const [logActionFilter, setLogActionFilter] = useState('');
   
   // Map Action Filter State (Logs map)
   const [mapFilters, setMapFilters] = useState({
@@ -130,18 +134,23 @@ export default function AdminDashboard({ session }) {
     // Clear previous instance
     if (logsMapInstanceRef.current) {
       logsMapInstanceRef.current.remove();
+      logsMapInstanceRef.current = null;
     }
 
     const validScans = logs.filter(l => l.latitude && l.longitude);
     if (validScans.length === 0) return;
 
-    // Start center at first log
-    const map = window.L.map(logsMapRef.current).setView([validScans[0].latitude, validScans[0].longitude], 12);
+    // Initialize map and fit bounds to show ALL markers, not just the first one
+    const map = window.L.map(logsMapRef.current);
     logsMapInstanceRef.current = map;
 
     window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '© OpenStreetMap contributors'
     }).addTo(map);
+
+    // Fit the view to encompass every scan so none are off-screen
+    const bounds = window.L.latLngBounds(validScans.map(s => [s.latitude, s.longitude]));
+    map.fitBounds(bounds, { padding: [40, 40], maxZoom: 14 });
 
     updateLogsMapMarkers();
   };
@@ -160,12 +169,13 @@ export default function AdminDashboard({ session }) {
       return mapFilters[scan.action] === true;
     });
 
-    // Plot matching markers
+    // Plot matching markers — use correct item type label (Supra / Other Lockbox / Listing Sign)
     filteredScans.forEach(scan => {
+      const scanType = getAssetTypeInfo(scan.signs?.label);
       const marker = window.L.marker([scan.latitude, scan.longitude]).addTo(map);
       marker.bindPopup(`
         <div style="font-family: Outfit, sans-serif; padding: 4px; color: #1e293b;">
-          <h4 style="margin: 0; font-size:14px; font-weight:800; color: #111112;">Sign #${scan.signs?.short_id}</h4>
+          <h4 style="margin: 0; font-size:14px; font-weight:800; color: #111112;">${scanType.displayName} #${scan.signs?.short_id}</h4>
           <p style="margin:4px 0 0 0; font-size:12px;">Action: <b style="text-transform:uppercase;">${scan.action}</b></p>
           <p style="margin:2px 0 0 0; font-size:12px;">Logged by: <b>${scan.agent_name || 'Agent'}</b></p>
           ${scan.property_address ? `<p style="margin:4px 0 0 0; font-size:11px; color:#c2410c; background: #fff7ed; padding: 4px; border-radius: 4px;">📍 ${scan.property_address}</p>` : ''}
@@ -524,9 +534,13 @@ export default function AdminDashboard({ session }) {
       (sign.last_property_address && sign.last_property_address.toLowerCase().includes(searchVal));
       
     const matchesStatus = statusFilter === '' || sign.status === statusFilter;
+    const matchesType = typeFilter === '' || getAssetTypeInfo(sign.label).type === typeFilter;
     
-    return matchesSearch && matchesStatus;
+    return matchesSearch && matchesStatus && matchesType;
   });
+
+  // Filtered scan log list
+  const filteredLogs = logActionFilter === '' ? logs : logs.filter(l => l.action === logActionFilter);
 
   return (
     <div style={{ padding: '24px 16px', maxWidth: '1000px', margin: '0 auto 80px auto' }}>
@@ -612,14 +626,28 @@ export default function AdminDashboard({ session }) {
               >
                 <option value="">All Statuses</option>
                 <option value="pickup">Picked Up</option>
-                <option value="deliver">Sign Placed</option>
+                <option value="deliver">Placed</option>
                 <option value="return">Returned</option>
               </select>
             </div>
 
+            <div style={{ minWidth: '160px' }}>
+              <select
+                className="form-input"
+                value={typeFilter}
+                onChange={(e) => setTypeFilter(e.target.value)}
+                style={{ cursor: 'pointer', height: '40px' }}
+              >
+                <option value="">All Types</option>
+                <option value="Listing Sign">Listing Signs</option>
+                <option value="Supra">Supras</option>
+                <option value="Other Lockbox">Other Lockboxes</option>
+              </select>
+            </div>
+
             <div style={{ display: 'flex', gap: '16px', fontSize: '13px', marginLeft: 'auto', padding: '0 8px', color: 'hsl(var(--text-secondary))' }}>
-              <span>Total: <b style={{ color: 'hsl(var(--primary))' }}>{signs.length}</b></span>
-              <span>Active Placements: <b style={{ color: 'hsl(var(--success))' }}>{signs.filter(s => s.status === 'deliver').length}</b></span>
+              <span>Showing: <b style={{ color: 'hsl(var(--primary))' }}>{filteredSigns.length}</b>{typeFilter || statusFilter ? ` of ${signs.length}` : ''}</span>
+              <span>Placed: <b style={{ color: 'hsl(var(--success))' }}>{filteredSigns.filter(s => s.status === 'deliver').length}</b></span>
             </div>
           </div>
 
@@ -896,16 +924,37 @@ export default function AdminDashboard({ session }) {
 
           {/* List panel */}
           <div className="glass-panel" style={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-            <div style={{ padding: '14px 16px', borderBottom: '1px solid hsl(var(--border-color))', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <ListIcon size={14} style={{ color: 'hsl(var(--primary))' }} />
-              <h3 style={{ fontSize: '14px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Scan Activity Log</h3>
+            {/* Header + filter bar */}
+            <div style={{ padding: '12px 16px', borderBottom: '1px solid hsl(var(--border-color))', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <ListIcon size={14} style={{ color: 'hsl(var(--primary))' }} />
+                  <h3 style={{ fontSize: '14px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Scan Activity Log</h3>
+                </div>
+                <span style={{ fontSize: '11px', color: 'hsl(var(--text-muted))' }}>
+                  📍 <b style={{ color: 'hsl(var(--success))' }}>{logs.filter(l => l.action === 'deliver').length}</b> placed
+                </span>
+              </div>
+              <select
+                className="form-input"
+                value={logActionFilter}
+                onChange={(e) => setLogActionFilter(e.target.value)}
+                style={{ cursor: 'pointer', height: '34px', fontSize: '12px', padding: '4px 8px' }}
+              >
+                <option value="">All Actions ({logs.length})</option>
+                <option value="deliver">Placed ({logs.filter(l => l.action === 'deliver').length})</option>
+                <option value="pickup">Picked Up ({logs.filter(l => l.action === 'pickup').length})</option>
+                <option value="return">Returned ({logs.filter(l => l.action === 'return').length})</option>
+              </select>
             </div>
             
             <div style={{ overflowY: 'auto', flexGrow: 1, padding: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              {logs.length === 0 ? (
-                <p style={{ color: 'hsl(var(--text-muted))', textAlign: 'center', padding: '20px', fontSize: '13px' }}>No scan events logged yet.</p>
+              {filteredLogs.length === 0 ? (
+                <p style={{ color: 'hsl(var(--text-muted))', textAlign: 'center', padding: '20px', fontSize: '13px' }}>No scan events match this filter.</p>
               ) : (
-                logs.map(log => (
+                filteredLogs.map(log => {
+                  const logType = getAssetTypeInfo(log.signs?.label);
+                  return (
                   <div key={log.id} style={{
                     padding: '12px',
                     borderRadius: '8px',
@@ -914,9 +963,9 @@ export default function AdminDashboard({ session }) {
                     fontSize: '13px'
                   }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                      <span style={{ fontWeight: 800, color: 'hsl(var(--text-primary))' }}>Sign #{log.signs?.short_id}</span>
+                      <span style={{ fontWeight: 800, color: 'hsl(var(--text-primary))' }}>{logType.displayName} #{log.signs?.short_id}</span>
                       <span className={`badge badge-${log.action}`} style={{ fontSize: '10px', padding: '2px 8px' }}>
-                        {log.action === 'deliver' ? 'Sign Placed' : log.action === 'pickup' ? 'Picked Up' : 'Returned'}
+                        {log.action === 'deliver' ? 'Placed' : log.action === 'pickup' ? 'Picked Up' : 'Returned'}
                       </span>
                     </div>
                     
@@ -958,7 +1007,8 @@ export default function AdminDashboard({ session }) {
                       <span>{new Date(log.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • {new Date(log.created_at).toLocaleDateString()}</span>
                     </div>
                   </div>
-                ))
+                  );
+                })
               )}
             </div>
           </div>
