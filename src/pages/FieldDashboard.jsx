@@ -40,6 +40,10 @@ export default function FieldDashboard({ session, onNavigate }) {
   // New Fields: Anonymous Custody & Property Address
   const [agentName, setAgentName] = useState('');
   const [propertyAddress, setPropertyAddress] = useState('');
+
+  // Confirm overlay
+  const [showConfirmOverlay, setShowConfirmOverlay] = useState(false);
+  const [showNotes, setShowNotes] = useState(false);
   
   // Camera hardware list states
   const [cameras, setCameras] = useState([]);
@@ -343,6 +347,8 @@ export default function FieldDashboard({ session, onNavigate }) {
     setManualId('');
     setError('');
     setPropertyAddress('');
+    setShowConfirmOverlay(false);
+    setShowNotes(false);
     if (!session) setAgentName('');
     stopScanner();
   };
@@ -588,7 +594,25 @@ export default function FieldDashboard({ session, onNavigate }) {
       {/* STEP 2: LOG ACTION FOR RESOLVED BATCH */}
       {scannedItems.length > 0 && !isScanningMore && !loading && (
         <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          
+
+          {/* ⚠️ Don't Forget Banner */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px',
+            padding: '12px 16px',
+            background: 'hsl(var(--warning) / 0.1)',
+            border: '1px solid hsl(var(--warning) / 0.35)',
+            borderLeft: '4px solid hsl(var(--warning))',
+            borderRadius: '8px'
+          }}>
+            <span style={{ fontSize: '22px', flexShrink: 0 }}>⚠️</span>
+            <div>
+              <p style={{ fontWeight: 900, fontSize: '13.5px', color: 'hsl(var(--warning))', letterSpacing: '0.02em' }}>DON’T FORGET TO HIT SUBMIT!</p>
+              <p style={{ fontSize: '11.5px', color: 'hsl(var(--text-secondary))', marginTop: '2px' }}>Tap an action below, then confirm in the popup to log this scan.</p>
+            </div>
+          </div>
+
           {/* Batch Details Header Card */}
           <div className="glass-panel" style={{ padding: '16px 20px', borderLeft: '4px solid hsl(var(--primary))' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
@@ -682,6 +706,9 @@ export default function FieldDashboard({ session, onNavigate }) {
                     onClick={() => {
                       setAction(act.id);
                       if (act.id !== 'deliver') setPropertyAddress('');
+                      setShowNotes(false);
+                      setError('');
+                      setShowConfirmOverlay(true);
                     }}
                     type="button"
                     style={{
@@ -799,6 +826,215 @@ export default function FieldDashboard({ session, onNavigate }) {
           >
             Submit Action <ArrowRight size={16} />
           </button>
+        </div>
+      )}
+
+      {/* ====== CONFIRM ACTION BOTTOM SHEET OVERLAY ====== */}
+      {showConfirmOverlay && action && (
+        <div
+          className="animate-fade-in"
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(5, 9, 20, 0.88)',
+            backdropFilter: 'blur(10px)',
+            zIndex: 500,
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'flex-end'
+          }}
+        >
+          <div style={{
+            background: 'hsl(var(--bg-card))',
+            borderRadius: '20px 20px 0 0',
+            padding: '8px 20px 24px 20px',
+            maxHeight: '92vh',
+            overflowY: 'auto',
+            borderTop: '2px solid hsl(var(--primary) / 0.3)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '14px'
+          }}>
+
+            {/* Drag handle */}
+            <div style={{ width: '44px', height: '4px', background: 'hsl(var(--border-color))', borderRadius: '2px', margin: '10px auto 2px auto' }} />
+
+            {/* Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <p style={{ fontSize: '10px', color: 'hsl(var(--primary))', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '2px' }}>Confirm &amp; Submit</p>
+                <h3 style={{ fontSize: '21px', fontWeight: 800 }}>
+                  {action === 'pickup' ? '🔄 Pickup' : action === 'deliver' ? '📍 Place at Property' : '🏢 Return to Office'}
+                </h3>
+              </div>
+              <button
+                onClick={() => setShowConfirmOverlay(false)}
+                style={{ background: 'none', border: '1px solid hsl(var(--border-color))', color: 'hsl(var(--text-secondary))', cursor: 'pointer', fontSize: '13px', padding: '6px 12px', borderRadius: '6px', fontWeight: 600 }}
+              >
+                ← Change
+              </button>
+            </div>
+
+            {/* Items being actioned */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              {scannedItems.map(item => {
+                const typeInfo = getAssetTypeInfo(item.label);
+                const ItemIcon = typeInfo.icon;
+                return (
+                  <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 14px', background: 'hsl(var(--primary) / 0.06)', borderRadius: '8px', border: '1px solid hsl(var(--primary) / 0.2)' }}>
+                    <ItemIcon size={15} style={{ color: 'hsl(var(--primary))', flexShrink: 0 }} />
+                    <span style={{ fontWeight: 700, fontSize: '15px' }}>{typeInfo.displayName} #{item.short_id}</span>
+                    {item.label && <span style={{ fontSize: '11px', color: 'hsl(var(--text-muted))' }}>({item.label})</span>}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Agent Name */}
+            <div>
+              <label className="form-label" htmlFor="overlayAgentName">
+                <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <User size={13} style={{ color: 'hsl(var(--primary))' }} /> Your Name *
+                </span>
+              </label>
+              <input
+                id="overlayAgentName"
+                type="text"
+                className="form-input"
+                placeholder="e.g. John Smith"
+                value={agentName}
+                onChange={(e) => setAgentName(e.target.value)}
+                disabled={!!session}
+                autoFocus={!session && action !== 'deliver'}
+              />
+              {!session && (
+                <p style={{ fontSize: '11px', color: 'hsl(var(--text-muted))', marginTop: '4px' }}>Required to track custody for anonymous scans.</p>
+              )}
+            </div>
+
+            {/* Property Address — deliver only */}
+            {action === 'deliver' && (
+              <div style={{ borderLeft: '4px solid hsl(var(--success))', paddingLeft: '14px' }}>
+                <label className="form-label" htmlFor="overlayAddress">
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <MapPin size={13} style={{ color: 'hsl(var(--success))' }} /> Property Address *
+                  </span>
+                </label>
+                <input
+                  id="overlayAddress"
+                  type="text"
+                  className="form-input"
+                  placeholder="e.g. 102 West Oak St, Farmington MO"
+                  value={propertyAddress}
+                  onChange={(e) => setPropertyAddress(e.target.value)}
+                  autoFocus
+                  required
+                />
+                <p style={{ fontSize: '11px', color: 'hsl(var(--text-muted))', marginTop: '4px' }}>Required to track where this item is placed.</p>
+              </div>
+            )}
+
+            {/* GPS Status */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '10px 14px',
+              background: coords ? 'hsl(var(--success) / 0.06)' : 'hsl(var(--danger) / 0.06)',
+              borderRadius: '8px',
+              border: `1px solid ${coords ? 'hsl(var(--success) / 0.2)' : 'hsl(var(--danger) / 0.2)'}`
+            }}>
+              {gpsLoading ? (
+                <>
+                  <Loader size={14} className="animate-spin" style={{ color: 'hsl(var(--primary))' }} />
+                  <span style={{ fontSize: '13px', color: 'hsl(var(--text-secondary))' }}>Acquiring GPS location...</span>
+                </>
+              ) : coords ? (
+                <>
+                  <CheckCircle size={14} style={{ color: 'hsl(var(--success))' }} />
+                  <span style={{ fontSize: '13px', color: 'hsl(var(--success))', fontWeight: 600 }}>
+                    GPS Ready — {coords.latitude.toFixed(4)}, {coords.longitude.toFixed(4)}
+                  </span>
+                </>
+              ) : (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%', justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <AlertCircle size={14} style={{ color: 'hsl(var(--danger))' }} />
+                    <span style={{ fontSize: '13px', color: 'hsl(var(--danger))', fontWeight: 600 }}>GPS not acquired</span>
+                  </div>
+                  <button
+                    onClick={requestGPS}
+                    style={{ background: 'hsl(var(--primary) / 0.1)', border: '1px solid hsl(var(--primary) / 0.3)', color: 'hsl(var(--primary))', cursor: 'pointer', fontSize: '12px', fontWeight: 700, padding: '4px 10px', borderRadius: '6px' }}
+                  >
+                    Retry GPS
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Notes — hidden by default, reveal on tap */}
+            {showNotes ? (
+              <div>
+                <label className="form-label" htmlFor="overlayNotes">Scan Notes (Optional)</label>
+                <textarea
+                  id="overlayNotes"
+                  className="form-input"
+                  rows={2}
+                  placeholder="e.g. Placed left of mailbox, keybox code is 1234..."
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  style={{ resize: 'none' }}
+                  autoFocus
+                />
+              </div>
+            ) : (
+              <button
+                onClick={() => setShowNotes(true)}
+                type="button"
+                style={{ background: 'none', border: '1px dashed hsl(var(--border-color))', color: 'hsl(var(--text-muted))', cursor: 'pointer', padding: '10px', borderRadius: '8px', fontSize: '13px', width: '100%', textAlign: 'center' }}
+              >
+                + Add a note (optional)
+              </button>
+            )}
+
+            {/* Error display inside overlay */}
+            {error && (
+              <div style={{ display: 'flex', gap: '10px', padding: '12px 16px', background: 'hsl(var(--danger) / 0.05)', border: '1px solid hsl(var(--danger) / 0.2)', borderLeft: '4px solid hsl(var(--danger))', borderRadius: '8px', color: 'hsl(var(--danger))', fontSize: '13px' }}>
+                <AlertCircle size={15} style={{ flexShrink: 0, marginTop: '2px' }} />
+                <span>{error}</span>
+              </div>
+            )}
+
+            {/* === THE BIG SUBMIT BUTTON === */}
+            <button
+              onClick={handleSubmitAction}
+              className="btn btn-primary"
+              disabled={!agentName.trim() || (action === 'deliver' && !propertyAddress.trim()) || !coords || loading || gpsLoading}
+              style={{
+                padding: '18px',
+                fontSize: '18px',
+                fontWeight: 900,
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center',
+                gap: '10px',
+                borderRadius: '14px',
+                letterSpacing: '0.02em',
+                boxShadow: '0 8px 24px hsl(var(--primary) / 0.35)'
+              }}
+            >
+              {loading ? (
+                <><Loader size={20} className="animate-spin" /> Submitting...</>
+              ) : (
+                <><CheckCircle size={20} /> Confirm &amp; Submit</>
+              )}
+            </button>
+
+            <div style={{ height: '8px' }} />
+          </div>
         </div>
       )}
     </div>
