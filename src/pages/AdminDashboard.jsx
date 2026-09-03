@@ -33,7 +33,8 @@ export default function AdminDashboard({ session }) {
   const [mapFilters, setMapFilters] = useState({
     deliver: true,
     pickup: true,
-    return: true
+    return: true,
+    admin_override: false
   });
   
   // Sign Detail Timeline State
@@ -46,6 +47,7 @@ export default function AdminDashboard({ session }) {
   const [editHolderName, setEditHolderName] = useState('');
   const [editAddress, setEditAddress] = useState('');
   const [editLabel, setEditLabel] = useState('');
+  const [editCity, setEditCity] = useState('');
 
   // Create / Batch print States
   const [newLabel, setNewLabel] = useState('');
@@ -64,6 +66,24 @@ export default function AdminDashboard({ session }) {
   
   const detailMapRef = useRef(null);
   const detailMapInstanceRef = useRef(null);
+
+  // Geocode a Missouri address → lat/lng via free OpenStreetMap Nominatim API
+  const geocodeAddress = async (street, city) => {
+    const query = `${street.trim()}${city && city.trim() ? ', ' + city.trim() : ''}, Missouri, USA`;
+    try {
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1`,
+        { headers: { 'User-Agent': 'MSREG-Inventory-App/1.0' } }
+      );
+      const data = await res.json();
+      if (data && data.length > 0) {
+        return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+      }
+    } catch (e) {
+      console.warn('Geocoding failed:', e);
+    }
+    return null;
+  };
 
   // Fetch initial data
   useEffect(() => {
@@ -440,6 +460,7 @@ export default function AdminDashboard({ session }) {
     setEditStatus(signItem.status);
     setEditHolderName(signItem.current_holder_name || '');
     setEditAddress(signItem.last_property_address || '');
+    setEditCity('');
     setEditLabel(signItem.label || '');
   };
 
@@ -448,9 +469,15 @@ export default function AdminDashboard({ session }) {
     setError('');
 
     try {
-      const nextAddress = editStatus === 'deliver' ? editAddress.trim() : null;
+      const streetPart = editAddress.trim();
+      const cityPart = editCity.trim();
+      const combinedAddress = streetPart
+        ? (cityPart ? `${streetPart}, ${cityPart}, MO` : streetPart)
+        : null;
+      const nextAddress = editStatus === 'deliver' ? combinedAddress : null;
       const nextHolder = editStatus === 'pickup' ? editHolderName.trim() : null;
 
+      // 1. Update sign record
       const { error: updateErr } = await supabase
         .from('signs')
         .update({
@@ -463,8 +490,30 @@ export default function AdminDashboard({ session }) {
 
       if (updateErr) throw updateErr;
 
+      // 2. Geocode address to get map pin coords (deliver overrides only)
+      let geocodedCoords = null;
+      if (editStatus === 'deliver' && streetPart) {
+        geocodedCoords = await geocodeAddress(streetPart, cityPart);
+      }
+
+      // 3. Log override as a scan record for full audit trail in timeline
+      const overrideNotes = `Admin override → status: "${editStatus}"${nextAddress ? ` | Address: ${nextAddress}` : ''}${nextHolder ? ` | Holder: ${nextHolder}` : ''}`;
+      const { error: overrideErr } = await supabase.rpc('log_admin_override', {
+        p_sign_id: signId,
+        p_action: 'admin_override',
+        p_latitude: geocodedCoords?.lat ?? null,
+        p_longitude: geocodedCoords?.lng ?? null,
+        p_notes: overrideNotes,
+        p_property_address: nextAddress
+      });
+
+      if (overrideErr) {
+        // Non-fatal: sign update succeeded — override log needs DB migration to activate
+        console.warn('Override audit log skipped (run DB migration in Supabase SQL Editor):', overrideErr.message);
+      }
+
       setEditingSignId(null);
-      await fetchData(); // Refresh list
+      await fetchData();
     } catch (err) {
       setError(err.message || 'Failed to save administrative updates.');
     } finally {
@@ -508,19 +557,21 @@ export default function AdminDashboard({ session }) {
     }));
   };
 
-  const setOnlyDeliveries = () => {
-    setMapFilters({
-      deliver: true,
-      pickup: false,
-      return: false
-    });
-  };
-
   const resetMapFilters = () => {
     setMapFilters({
       deliver: true,
       pickup: true,
-      return: true
+      return: true,
+      admin_override: false
+    });
+  };
+
+  const setOnlyDeliveries = () => {
+    setMapFilters({
+      deliver: true,
+      pickup: false,
+      return: false,
+      admin_override: false
     });
   };
 
@@ -723,17 +774,30 @@ export default function AdminDashboard({ session }) {
                         )}
 
                         {editStatus === 'deliver' && (
-                          <div>
-                            <label className="form-label" style={{ fontSize: '10px', marginBottom: '2px' }}>Property Address</label>
-                            <input 
-                              type="text" 
-                              className="form-input" 
-                              placeholder="e.g. 102 West Oak St"
-                              value={editAddress} 
-                              onChange={(e) => setEditAddress(e.target.value)} 
-                              style={{ height: '36px', padding: '6px 10px', fontSize: '13px' }}
-                            />
-                          </div>
+                          <>
+                            <div>
+                              <label className="form-label" style={{ fontSize: '10px', marginBottom: '2px' }}>Street Address</label>
+                              <input 
+                                type="text" 
+                                className="form-input" 
+                                placeholder="e.g. 713 Missouri Ave"
+                                value={editAddress} 
+                                onChange={(e) => setEditAddress(e.target.value)} 
+                                style={{ height: '36px', padding: '6px 10px', fontSize: '13px' }}
+                              />
+                            </div>
+                            <div>
+                              <label className="form-label" style={{ fontSize: '10px', marginBottom: '2px' }}>City <span style={{ color: 'hsl(var(--text-muted))', fontWeight: 400 }}>(optional — geocodes to MO)</span></label>
+                              <input 
+                                type="text" 
+                                className="form-input" 
+                                placeholder="e.g. Farmington"
+                                value={editCity} 
+                                onChange={(e) => setEditCity(e.target.value)} 
+                                style={{ height: '36px', padding: '6px 10px', fontSize: '13px' }}
+                              />
+                            </div>
+                          </>
                         )}
 
                         <div style={{ display: 'flex', gap: '8px', marginTop: '6px' }}>
@@ -884,16 +948,17 @@ export default function AdminDashboard({ session }) {
                 {[
                   { id: 'deliver', label: '📍 Placed Signs', color: 'hsl(var(--success))' },
                   { id: 'pickup', label: '🔄 Picked Up', color: 'hsl(var(--warning))' },
-                  { id: 'return', label: '🏢 Returned Storage', color: 'hsl(var(--text-secondary))' }
+                  { id: 'return', label: '🏢 Returned Storage', color: 'hsl(var(--text-secondary))' },
+                  { id: 'admin_override', label: '⚙️ Admin Overrides', color: 'hsl(270, 60%, 65%)' }
                 ].map(item => (
                   <label key={item.id} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', cursor: 'pointer' }}>
                     <input 
                       type="checkbox" 
-                      checked={mapFilters[item.id]} 
+                      checked={mapFilters[item.id] ?? false} 
                       onChange={() => toggleMapFilter(item.id)}
                       style={{ accentColor: 'hsl(var(--primary))' }}
                     />
-                    <span style={{ color: mapFilters[item.id] ? item.color : 'hsl(var(--text-muted))', fontWeight: mapFilters[item.id] ? 600 : 400 }}>
+                    <span style={{ color: (mapFilters[item.id]) ? item.color : 'hsl(var(--text-muted))', fontWeight: mapFilters[item.id] ? 600 : 400 }}>
                       {item.label}
                     </span>
                   </label>
@@ -945,6 +1010,7 @@ export default function AdminDashboard({ session }) {
                 <option value="deliver">Placed ({logs.filter(l => l.action === 'deliver').length})</option>
                 <option value="pickup">Picked Up ({logs.filter(l => l.action === 'pickup').length})</option>
                 <option value="return">Returned ({logs.filter(l => l.action === 'return').length})</option>
+                <option value="admin_override">⚙️ Admin Overrides ({logs.filter(l => l.action === 'admin_override').length})</option>
               </select>
             </div>
             
@@ -964,8 +1030,17 @@ export default function AdminDashboard({ session }) {
                   }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
                       <span style={{ fontWeight: 800, color: 'hsl(var(--text-primary))' }}>{logType.displayName} #{log.signs?.short_id}</span>
-                      <span className={`badge badge-${log.action}`} style={{ fontSize: '10px', padding: '2px 8px' }}>
-                        {log.action === 'deliver' ? 'Placed' : log.action === 'pickup' ? 'Picked Up' : 'Returned'}
+                      <span 
+                        className={log.action !== 'admin_override' ? `badge badge-${log.action}` : undefined}
+                        style={log.action === 'admin_override' ? {
+                          fontSize: '10px', padding: '2px 8px',
+                          background: 'hsl(270 60% 65% / 0.12)',
+                          color: 'hsl(270, 60%, 65%)',
+                          border: '1px solid hsl(270 60% 65% / 0.3)',
+                          borderRadius: '12px', fontWeight: 700
+                        } : { fontSize: '10px', padding: '2px 8px' }}
+                      >
+                        {log.action === 'deliver' ? 'Placed' : log.action === 'pickup' ? 'Picked Up' : log.action === 'admin_override' ? '⚙️ Override' : 'Returned'}
                       </span>
                     </div>
                     
@@ -973,7 +1048,7 @@ export default function AdminDashboard({ session }) {
                       Logged by: <b style={{ color: 'hsl(var(--text-primary))' }}>{log.agent_name || 'Anonymous Agent'}</b>
                     </p>
 
-                    {log.action === 'deliver' && log.property_address && (
+                    {log.property_address && (
                       <p style={{ 
                         margin: '4px 0', 
                         fontSize: '12px', 
@@ -1197,8 +1272,11 @@ export default function AdminDashboard({ session }) {
                       }}></div>
                       
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', fontSize: '13px' }}>
-                        <span style={{ fontWeight: 800, color: 'hsl(var(--text-primary))' }}>
-                          {hist.action.toUpperCase()}
+                        <span style={{ 
+                          fontWeight: 800, 
+                          color: hist.action === 'admin_override' ? 'hsl(270, 60%, 65%)' : 'hsl(var(--text-primary))'
+                        }}>
+                          {hist.action === 'admin_override' ? '⚙️ Admin Override' : hist.action.toUpperCase()}
                         </span>
                         <span style={{ fontSize: '10px', color: 'hsl(var(--text-muted))' }}>
                           {new Date(hist.created_at).toLocaleString()}
@@ -1209,7 +1287,7 @@ export default function AdminDashboard({ session }) {
                         Agent: <b>{hist.agent_name || 'Anonymous Agent'}</b>
                       </p>
 
-                      {hist.action === 'deliver' && hist.property_address && (
+                      {hist.property_address && (
                         <p style={{ 
                           fontSize: '12px', 
                           color: 'hsl(var(--success))', 

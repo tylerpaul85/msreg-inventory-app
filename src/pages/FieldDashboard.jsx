@@ -37,9 +37,10 @@ export default function FieldDashboard({ session, onNavigate }) {
   const [action, setAction] = useState('');
   const [notes, setNotes] = useState('');
   
-  // New Fields: Anonymous Custody & Property Address
+  // New Fields: Anonymous Custody & Property Address (split into Street + City)
   const [agentName, setAgentName] = useState('');
-  const [propertyAddress, setPropertyAddress] = useState('');
+  const [streetAddress, setStreetAddress] = useState('');
+  const [propertyCity, setPropertyCity] = useState('');
 
   // Confirm overlay
   const [showConfirmOverlay, setShowConfirmOverlay] = useState(false);
@@ -346,7 +347,8 @@ export default function FieldDashboard({ session, onNavigate }) {
     setNotes('');
     setManualId('');
     setError('');
-    setPropertyAddress('');
+    setStreetAddress('');
+    setPropertyCity('');
     setShowConfirmOverlay(false);
     setShowNotes(false);
     if (!session) setAgentName('');
@@ -363,8 +365,8 @@ export default function FieldDashboard({ session, onNavigate }) {
       setError('Your Name/Initials are required to log actions.');
       return;
     }
-    if (action === 'deliver' && !propertyAddress.trim()) {
-      setError('Property Address is required for placing items.');
+    if (action === 'deliver' && !streetAddress.trim()) {
+      setError('Street Address is required for placing items.');
       return;
     }
     if (!coords) {
@@ -385,7 +387,7 @@ export default function FieldDashboard({ session, onNavigate }) {
           p_longitude: coords.longitude,
           p_notes: notes.trim() || null,
           p_agent_name: agentName.trim(),
-          p_property_address: action === 'deliver' ? propertyAddress.trim() : null
+          p_property_address: action === 'deliver' ? (propertyCity.trim() ? `${streetAddress.trim()}, ${propertyCity.trim()}, MO` : streetAddress.trim()) : null
         });
 
         if (rpcError) throw rpcError;
@@ -398,7 +400,7 @@ export default function FieldDashboard({ session, onNavigate }) {
         coords: coords,
         notes: notes,
         agentName: agentName,
-        propertyAddress: action === 'deliver' ? propertyAddress : null,
+        propertyAddress: action === 'deliver' ? (propertyCity.trim() ? `${streetAddress.trim()}, ${propertyCity.trim()}, MO` : streetAddress.trim()) : null,
         assetTypeName: scannedItems.length === 1 
           ? getAssetTypeInfo(scannedItems[0].label).displayName 
           : 'Batch Items'
@@ -705,7 +707,7 @@ export default function FieldDashboard({ session, onNavigate }) {
                     key={act.id}
                     onClick={() => {
                       setAction(act.id);
-                      if (act.id !== 'deliver') setPropertyAddress('');
+                      if (act.id !== 'deliver') { setStreetAddress(''); setPropertyCity(''); }
                       setShowNotes(false);
                       setError('');
                       setShowConfirmOverlay(true);
@@ -736,25 +738,40 @@ export default function FieldDashboard({ session, onNavigate }) {
             </div>
           </div>
 
-          {/* Property Address Input (Only visible and required when status is 'deliver') */}
+          {/* Property Address Input (Street + City, only shown for 'deliver') */}
           {action === 'deliver' && (
-            <div className="glass-panel animate-fade-in" style={{ padding: '16px 20px', borderLeft: '4px solid hsl(var(--success))' }}>
-              <label className="form-label" htmlFor="propAddr">
-                <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <MapPin size={14} style={{ color: 'hsl(var(--success))' }} />
-                  Property Address *
-                </span>
-              </label>
-              <input
-                id="propAddr"
-                type="text"
-                className="form-input"
-                placeholder="e.g. 102 West Oak St, Farmington MO"
-                value={propertyAddress}
-                onChange={(e) => setPropertyAddress(e.target.value)}
-                required
-              />
-              <p style={{ fontSize: '11px', color: 'hsl(var(--text-muted))', marginTop: '4px' }}>
+            <div className="glass-panel animate-fade-in" style={{ padding: '16px 20px', borderLeft: '4px solid hsl(var(--success))', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <div>
+                <label className="form-label" htmlFor="propAddr">
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <MapPin size={14} style={{ color: 'hsl(var(--success))' }} />
+                    Street Address *
+                  </span>
+                </label>
+                <input
+                  id="propAddr"
+                  type="text"
+                  className="form-input"
+                  placeholder="e.g. 713 Missouri Ave"
+                  value={streetAddress}
+                  onChange={(e) => setStreetAddress(e.target.value)}
+                  required
+                />
+              </div>
+              <div>
+                <label className="form-label" htmlFor="propCity" style={{ fontSize: '11px' }}>
+                  City <span style={{ color: 'hsl(var(--text-muted))', fontWeight: 400 }}>(optional)</span>
+                </label>
+                <input
+                  id="propCity"
+                  type="text"
+                  className="form-input"
+                  placeholder="e.g. Farmington"
+                  value={propertyCity}
+                  onChange={(e) => setPropertyCity(e.target.value)}
+                />
+              </div>
+              <p style={{ fontSize: '11px', color: 'hsl(var(--text-muted))' }}>
                 Required for placements to track the active property location.
               </p>
             </div>
@@ -821,7 +838,7 @@ export default function FieldDashboard({ session, onNavigate }) {
           <button
             onClick={handleSubmitAction}
             className="btn btn-primary"
-            disabled={!action || !agentName.trim() || (action === 'deliver' && !propertyAddress.trim()) || !coords || loading}
+            disabled={!action || !agentName.trim() || (action === 'deliver' && !streetAddress.trim()) || !coords || loading}
             style={{ padding: '14px', fontSize: '15px', display: 'flex', justifyContent: 'center', gap: '6px' }}
           >
             Submit Action <ArrowRight size={16} />
@@ -915,25 +932,40 @@ export default function FieldDashboard({ session, onNavigate }) {
               )}
             </div>
 
-            {/* Property Address — deliver only */}
+            {/* Property Address — deliver only (Street + City) */}
             {action === 'deliver' && (
-              <div style={{ borderLeft: '4px solid hsl(var(--success))', paddingLeft: '14px' }}>
-                <label className="form-label" htmlFor="overlayAddress">
-                  <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <MapPin size={13} style={{ color: 'hsl(var(--success))' }} /> Property Address *
-                  </span>
-                </label>
-                <input
-                  id="overlayAddress"
-                  type="text"
-                  className="form-input"
-                  placeholder="e.g. 102 West Oak St, Farmington MO"
-                  value={propertyAddress}
-                  onChange={(e) => setPropertyAddress(e.target.value)}
-                  autoFocus
-                  required
-                />
-                <p style={{ fontSize: '11px', color: 'hsl(var(--text-muted))', marginTop: '4px' }}>Required to track where this item is placed.</p>
+              <div style={{ borderLeft: '4px solid hsl(var(--success))', paddingLeft: '14px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <div>
+                  <label className="form-label" htmlFor="overlayStreet">
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <MapPin size={13} style={{ color: 'hsl(var(--success))' }} /> Street Address *
+                    </span>
+                  </label>
+                  <input
+                    id="overlayStreet"
+                    type="text"
+                    className="form-input"
+                    placeholder="e.g. 713 Missouri Ave"
+                    value={streetAddress}
+                    onChange={(e) => setStreetAddress(e.target.value)}
+                    autoFocus
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="form-label" htmlFor="overlayCity" style={{ fontSize: '11px' }}>
+                    City <span style={{ color: 'hsl(var(--text-muted))', fontWeight: 400 }}>(optional)</span>
+                  </label>
+                  <input
+                    id="overlayCity"
+                    type="text"
+                    className="form-input"
+                    placeholder="e.g. Farmington"
+                    value={propertyCity}
+                    onChange={(e) => setPropertyCity(e.target.value)}
+                  />
+                </div>
+                <p style={{ fontSize: '11px', color: 'hsl(var(--text-muted))' }}>Required to track where this item is placed.</p>
               </div>
             )}
 
@@ -1012,7 +1044,7 @@ export default function FieldDashboard({ session, onNavigate }) {
             <button
               onClick={handleSubmitAction}
               className="btn btn-primary"
-              disabled={!agentName.trim() || (action === 'deliver' && !propertyAddress.trim()) || !coords || loading || gpsLoading}
+              disabled={!agentName.trim() || (action === 'deliver' && !streetAddress.trim()) || !coords || loading || gpsLoading}
               style={{
                 padding: '18px',
                 fontSize: '18px',

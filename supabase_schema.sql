@@ -173,3 +173,54 @@ from auth.users
 on conflict (id) do update set role = 'admin';
 
 update public.profiles set role = 'admin';
+
+-- ============================================================
+-- MIGRATION: Override Audit Trail + Geocoded Address Support
+-- Run these in Supabase SQL Editor before deploying matching UI
+-- Safe: only loosens constraints, never modifies existing rows
+-- ============================================================
+
+-- 1. Expand action check constraint to allow 'admin_override'
+ALTER TABLE public.scans
+DROP CONSTRAINT IF EXISTS scans_action_check;
+
+ALTER TABLE public.scans
+ADD CONSTRAINT scans_action_check
+CHECK (action IN ('deliver', 'pickup', 'return', 'admin_override'));
+
+-- 2. Make lat/lng nullable so geocoded-address overrides can save without GPS
+ALTER TABLE public.scans
+ALTER COLUMN latitude DROP NOT NULL;
+
+ALTER TABLE public.scans
+ALTER COLUMN longitude DROP NOT NULL;
+
+-- 3. New RPC: log admin override with optional coords (security definer bypasses RLS)
+CREATE OR REPLACE FUNCTION public.log_admin_override(
+  p_sign_id uuid,
+  p_action text,
+  p_latitude double precision,
+  p_longitude double precision,
+  p_notes text,
+  p_property_address text
+)
+RETURNS void SECURITY DEFINER AS $$
+DECLARE
+  v_user_id uuid;
+  v_agent_name text;
+BEGIN
+  v_user_id := auth.uid();
+  IF v_user_id IS NOT NULL THEN
+    SELECT full_name INTO v_agent_name FROM public.profiles WHERE id = v_user_id;
+  END IF;
+
+  INSERT INTO public.scans (
+    sign_id, user_id, agent_name, property_address,
+    action, latitude, longitude, notes
+  ) VALUES (
+    p_sign_id, v_user_id, v_agent_name, p_property_address,
+    p_action, p_latitude, p_longitude, p_notes
+  );
+END;
+$$ LANGUAGE plpgsql;
+
