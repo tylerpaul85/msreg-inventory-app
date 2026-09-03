@@ -8,6 +8,7 @@ import {
   List as ListIcon, Route, ArrowRight, Edit, Save, X,
   Key, Lock
 } from 'lucide-react';
+import { geocodeAddress } from '../utils/geocoder';
 
 export default function AdminDashboard({ session }) {
   const [activeTab, setActiveTab] = useState('inventory'); // 'inventory', 'logs', 'create', 'detail'
@@ -66,24 +67,6 @@ export default function AdminDashboard({ session }) {
   
   const detailMapRef = useRef(null);
   const detailMapInstanceRef = useRef(null);
-
-  // Geocode a Missouri address → lat/lng via free OpenStreetMap Nominatim API
-  const geocodeAddress = async (street, city) => {
-    const query = `${street.trim()}${city && city.trim() ? ', ' + city.trim() : ''}, Missouri, USA`;
-    try {
-      const res = await fetch(
-        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1`,
-        { headers: { 'User-Agent': 'MSREG-Inventory-App/1.0' } }
-      );
-      const data = await res.json();
-      if (data && data.length > 0) {
-        return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
-      }
-    } catch (e) {
-      console.warn('Geocoding failed:', e);
-    }
-    return null;
-  };
 
   // Fetch initial data
   useEffect(() => {
