@@ -334,15 +334,24 @@ body {
 
 /* Print Styles */
 @media print {
+  @page {
+    margin: 0.3in !important;
+    size: auto;
+  }
+
   html, body, #root {
     height: auto !important;
     min-height: 0 !important;
     overflow: visible !important;
+    background: white !important;
+    color: black !important;
   }
 
   body {
     background: white !important;
     color: black !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
   
   .no-print {
@@ -352,39 +361,60 @@ body {
   .print-page {
     display: block !important;
     padding: 0 !important;
+    margin: 0 !important;
   }
   
   .print-grid {
     display: grid !important;
-    grid-template-columns: repeat(2, 1fr) !important;
-    gap: 15px !important;
+    grid-template-columns: repeat(3, 1fr) !important;
+    gap: 8px !important;
     width: 100% !important;
+  }
+
+  .print-grid.grid-dense {
+    grid-template-columns: repeat(4, 1fr) !important;
+    gap: 6px !important;
   }
   
   .print-card {
-    border: 1.5px dashed #000000 !important;
-    padding: 15px !important;
+    border: 1.5px dashed #333333 !important;
+    padding: 8px !important;
     page-break-inside: avoid !important;
+    break-inside: avoid !important;
     background: white !important;
     color: black !important;
-    border-radius: 0 !important;
+    border-radius: 6px !important;
     text-align: center !important;
     display: flex !important;
     flex-direction: column !important;
     align-items: center !important;
     justify-content: center !important;
+    box-sizing: border-box !important;
   }
   
   .print-card img {
-    width: 150px !important;
-    height: 150px !important;
+    width: 95px !important;
+    height: 95px !important;
+    display: block !important;
+    margin: 0 auto !important;
   }
   
   .print-card .id-label {
-    font-size: 24px !important;
-    font-weight: 700 !important;
-    margin-top: 10px !important;
-    letter-spacing: 0.1em !important;
+    font-size: 13px !important;
+    font-weight: 800 !important;
+    margin-top: 4px !important;
+    letter-spacing: 0.03em !important;
     color: black !important;
+    text-transform: uppercase !important;
+    line-height: 1.2 !important;
+  }
+
+  .print-card .token-label {
+    font-size: 8px !important;
+    color: #444 !important;
+    margin-top: 2px !important;
+    font-family: monospace !important;
+    word-break: break-all !important;
   }
 }
+

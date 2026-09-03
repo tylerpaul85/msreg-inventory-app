@@ -55,6 +55,7 @@ export default function AdminDashboard({ session }) {
   const [batchCount, setBatchCount] = useState(1);
   const [createdSigns, setCreatedSigns] = useState([]); // Temporary holder for newly created batch to print
   const [qrCodes, setQrCodes] = useState({}); // mapping: qr_token -> dataURL
+  const [printDensity, setPrintDensity] = useState('compact'); // 'compact' (12/page), 'dense' (16/page), 'standard' (6/page)
   
   // Single QR code modal and printing states
   const [qrModalSign, setQrModalSign] = useState(null);
@@ -307,7 +308,7 @@ export default function AdminDashboard({ session }) {
     const qrUrl = qrCodes[signItem.qr_token] || await generateQRCodeURL(signItem.qr_token);
     const typeInfo = getAssetTypeInfo(signItem.label);
     
-    const printWindow = window.open('', '_blank', 'width=600,height=600');
+    const printWindow = window.open('', '_blank', 'width=450,height=500');
     if (!printWindow) {
       alert('Pop-up blocked! Please allow pop-ups for this website to print.');
       return;
@@ -318,43 +319,50 @@ export default function AdminDashboard({ session }) {
         <head>
           <title>Print ${typeInfo.displayName} #${signItem.short_id}</title>
           <style>
+            @page {
+              margin: 0.25in;
+              size: auto;
+            }
             body {
               font-family: 'Outfit', -apple-system, sans-serif;
               display: flex;
               flex-direction: column;
-              align-items: center;
-              justify-content: center;
-              height: 100vh;
+              align-items: flex-start;
+              justify-content: flex-start;
               margin: 0;
+              padding: 10px;
               background: white;
               color: black;
             }
             .card {
-              border: 3px dashed #000000;
-              padding: 30px;
+              border: 1.5px dashed #000000;
+              padding: 10px 14px;
               text-align: center;
-              display: flex;
+              display: inline-flex;
               flex-direction: column;
               align-items: center;
               justify-content: center;
-              width: 320px;
+              width: 175px;
               box-sizing: border-box;
+              border-radius: 6px;
             }
             .qr-img {
-              width: 220px;
-              height: 220px;
+              width: 100px;
+              height: 100px;
+              display: block;
             }
             .id-label {
-              font-size: 30px;
+              font-size: 13px;
               font-weight: 900;
-              margin-top: 15px;
-              letter-spacing: 0.05em;
+              margin-top: 6px;
+              letter-spacing: 0.04em;
               text-transform: uppercase;
+              line-height: 1.2;
             }
             .token-label {
-              font-size: 11px;
+              font-size: 8px;
               color: #555;
-              margin-top: 4px;
+              margin-top: 2px;
               font-family: monospace;
               word-break: break-all;
             }
@@ -1132,53 +1140,70 @@ export default function AdminDashboard({ session }) {
           {/* Printable Labels Display Section */}
           {createdSigns.length > 0 && (
             <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <div className="glass-panel no-print" style={{ padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'hsl(var(--primary) / 0.05)' }}>
+              <div className="glass-panel no-print" style={{ padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', background: 'hsl(var(--primary) / 0.05)' }}>
                 <div>
                   <h4 style={{ fontSize: '15px', fontWeight: 700 }}>Generated {createdSigns.length} Labels for Printing</h4>
-                  <p style={{ color: 'hsl(var(--text-secondary))', fontSize: '12px' }}>Press Print to generate print preview.</p>
+                  <p style={{ color: 'hsl(var(--text-secondary))', fontSize: '12px' }}>Compact grid layout uses less paper (~12-16 labels per page).</p>
                 </div>
-                <button onClick={handlePrint} className="btn btn-primary" style={{ padding: '8px 16px', fontSize: '13px' }}>
-                  <Printer size={15} /> Print QR Labels
-                </button>
+                
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px' }}>
+                    <span style={{ color: 'hsl(var(--text-muted))' }}>Density:</span>
+                    <select
+                      className="form-input"
+                      value={printDensity}
+                      onChange={(e) => setPrintDensity(e.target.value)}
+                      style={{ height: '34px', padding: '4px 8px', fontSize: '12px', cursor: 'pointer' }}
+                    >
+                      <option value="compact">Compact (3 per row / ~12 per page)</option>
+                      <option value="dense">Dense (4 per row / ~16 per page)</option>
+                      <option value="standard">Standard (2 per row / ~6 per page)</option>
+                    </select>
+                  </div>
+                  
+                  <button onClick={handlePrint} className="btn btn-primary" style={{ padding: '8px 16px', fontSize: '13px' }}>
+                    <Printer size={15} /> Print QR Sheet
+                  </button>
+                </div>
               </div>
 
-              {/* Renders standard label output cards for printing */}
-              <div className="print-page print-grid" style={{
+              {/* Renders compact label output cards for printing */}
+              <div className={`print-page print-grid ${printDensity === 'dense' ? 'grid-dense' : ''}`} style={{
                 display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
-                gap: '20px',
+                gridTemplateColumns: printDensity === 'dense' ? 'repeat(4, 1fr)' : printDensity === 'standard' ? 'repeat(2, 1fr)' : 'repeat(3, 1fr)',
+                gap: '10px',
                 padding: '10px'
               }}>
                 {createdSigns.map(sign => (
                   <div key={sign.id} className="print-card" style={{
                     background: 'white',
                     color: 'black',
-                    padding: '20px',
-                    borderRadius: '10px',
+                    padding: '10px',
+                    borderRadius: '8px',
                     textAlign: 'center',
-                    border: '2px dashed #000000',
+                    border: '1.5px dashed #000000',
                     display: 'flex',
                     flexDirection: 'column',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    gap: '10px'
+                    gap: '4px'
                   }}>
                     {qrCodes[sign.qr_token] ? (
                       <img 
                         src={qrCodes[sign.qr_token]} 
                         alt={`QR code for ${sign.short_id}`} 
-                        style={{ width: '150px', height: '150px' }}
+                        style={{ width: printDensity === 'dense' ? '85px' : printDensity === 'standard' ? '130px' : '95px', height: printDensity === 'dense' ? '85px' : printDensity === 'standard' ? '130px' : '95px' }}
                       />
                     ) : (
-                      <div style={{ width: '150px', height: '150px', background: '#eee', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#666' }}>
+                      <div style={{ width: '95px', height: '95px', background: '#eee', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#666', fontSize: '11px' }}>
                         Loading QR...
                       </div>
                     )}
                     <div>
-                      <div className="id-label" style={{ fontSize: '20px', fontWeight: 900, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+                      <div className="id-label" style={{ fontSize: printDensity === 'dense' ? '12px' : '14px', fontWeight: 900, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
                         {selectedAssetType} #{sign.short_id}
                       </div>
-                      <div style={{ fontSize: '9px', color: '#777', marginTop: '1px', wordBreak: 'break-all', fontFamily: 'monospace' }}>
+                      <div className="token-label" style={{ fontSize: '8px', color: '#666', marginTop: '1px', wordBreak: 'break-all', fontFamily: 'monospace' }}>
                         {sign.qr_token}
                       </div>
                     </div>
